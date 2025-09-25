@@ -1,6 +1,5 @@
-﻿Class Application
-
-    ' Application-level events, such as Startup, Exit, and DispatcherUnhandledException
-    ' can be handled in this file.
-
-End Class
+﻿Namespace Screen_Recorder
+    Partial Public Class App
+        Inherits System.Windows.Application
+    End Class
+End Namespace

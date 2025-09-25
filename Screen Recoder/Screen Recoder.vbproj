@@ -3,8 +3,14 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net9.0-windows</TargetFramework>
-    <RootNamespace>Screen_Recoder</RootNamespace>
+    <RootNamespace>ScreenRecoder</RootNamespace>
     <UseWPF>true</UseWPF>
+    <MyType>Windows</MyType>
+    <OptionInfer>On</OptionInfer>
+    <OptionStrict>On</OptionStrict>
+    <OptionExplicit>On</OptionExplicit>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableMyExtensions>true</EnableMyExtensions>
   </PropertyGroup>
 
   <ItemGroup>
