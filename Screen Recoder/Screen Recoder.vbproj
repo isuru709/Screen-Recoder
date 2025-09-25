@@ -11,7 +11,17 @@
     <OptionExplicit>On</OptionExplicit>
     <UseWindowsForms>true</UseWindowsForms>
     <EnableMyExtensions>true</EnableMyExtensions>
+    <ApplicationIcon>bd-removebg-preview (1).ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="bd-removebg-preview %281%29.png" />
+    <None Remove="Image_fx %2811%29.jpg" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="bd-removebg-preview (1).ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <Import Include="System.Windows" />
@@ -23,6 +33,11 @@
     <Import Include="System.Windows.Media.Imaging" />
     <Import Include="System.Windows.Navigation" />
     <Import Include="System.Windows.Shapes" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="bd-removebg-preview (1).png" />
+    <Resource Include="Image_fx (11).jpg" />
   </ItemGroup>
 
 </Project>

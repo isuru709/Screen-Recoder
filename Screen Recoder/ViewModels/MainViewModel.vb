@@ -2,6 +2,7 @@ Imports System.Collections.ObjectModel
 Imports System.ComponentModel
 Imports System.IO
 Imports System.Runtime.CompilerServices
+Imports System.Runtime.InteropServices
 Imports ScreenRecoder.Models
 Imports ScreenRecoder.Services
 
@@ -22,6 +23,36 @@ Namespace ViewModels
         Public ReadOnly Property Monitors As ObservableCollection(Of Models.MonitorInfo)
             Get
                 Return _monitors
+            End Get
+        End Property
+
+        ' Bind the Source combo to this so we can raise visibility updates
+        Public Property SelectedCaptureSource As CaptureSource
+            Get
+                Return Settings.CaptureSource
+            End Get
+            Set(value As CaptureSource)
+                If Settings.CaptureSource <> value Then
+                    Settings.CaptureSource = value
+                    OnPropertyChanged()
+                    OnPropertyChanged(NameOf(IsWindowTitleSource))
+                    OnPropertyChanged(NameOf(IsRegionSource))
+                    If value = CaptureSource.WindowTitle Then
+                        LoadWindows()
+                    End If
+                End If
+            End Set
+        End Property
+
+        Public ReadOnly Property IsWindowTitleSource As Boolean
+            Get
+                Return SelectedCaptureSource = CaptureSource.WindowTitle
+            End Get
+        End Property
+
+        Public ReadOnly Property IsRegionSource As Boolean
+            Get
+                Return SelectedCaptureSource = CaptureSource.Region
             End Get
         End Property
 
@@ -46,6 +77,14 @@ Namespace ViewModels
         Public ReadOnly Property QualityLevels As ObservableCollection(Of String)
             Get
                 Return _qualityLevels
+            End Get
+        End Property
+
+        ' Running windows for WindowTitle capture
+        Private ReadOnly _runningWindows As New ObservableCollection(Of String)()
+        Public ReadOnly Property RunningWindows As ObservableCollection(Of String)
+            Get
+                Return _runningWindows
             End Get
         End Property
 
@@ -91,6 +130,17 @@ Namespace ViewModels
             End Set
         End Property
 
+        Private _isPaused As Boolean
+        Public Property IsPaused As Boolean
+            Get
+                Return _isPaused
+            End Get
+            Private Set(value As Boolean)
+                _isPaused = value
+                OnPropertyChanged()
+            End Set
+        End Property
+
         Public Event PropertyChanged As PropertyChangedEventHandler Implements INotifyPropertyChanged.PropertyChanged
 
         Public Sub New()
@@ -117,7 +167,7 @@ Namespace ViewModels
                 "Intel AV1 (av1_qsv)"
             }
 
-            _qualityLevels = New ObservableCollection(Of String) From {"Low", "Medium", "High"}
+            _qualityLevels = New ObservableCollection(Of String) From {"Ultra Low", "Low", "Medium", "High"}
 
             If String.IsNullOrWhiteSpace(Settings.VideoEncoder) Then
                 Settings.VideoEncoder = "Software (libx264)"
@@ -128,10 +178,14 @@ Namespace ViewModels
 
             _monitors = New ObservableCollection(Of Models.MonitorInfo)()
             LoadMonitors()
+            LoadWindows()
 
             AddHandler _rec.Log, Sub(line) AppendLog(line)
             AddHandler _rec.StatusChanged, Sub(s) Status = s
-            AddHandler _rec.RecordingStopped, Sub(code) IsRecording = False
+            AddHandler _rec.RecordingStopped, Sub(code)
+                                                  IsRecording = False
+                                                  IsPaused = False
+                                              End Sub
             AddHandler _rec.Progress, Sub(t, fps, spd) Status = $"Recording… {t:hh\:mm\:ss} | {fps:0.0} fps | {spd:0.00}x"
         End Sub
 
@@ -139,14 +193,22 @@ Namespace ViewModels
             Monitors.Clear()
             Dim idx = 0
             For Each sc In System.Windows.Forms.Screen.AllScreens
-                Monitors.Add(New Models.MonitorInfo With {
-                    .Index = idx,
-                    .Bounds = sc.Bounds
-                })
+                Monitors.Add(New Models.MonitorInfo With {.Index = idx, .Bounds = sc.Bounds})
                 idx += 1
             Next
             If Monitors.Count > 0 Then
                 SelectedMonitor = Monitors(0)
+            End If
+        End Sub
+
+        Public Sub LoadWindows()
+            RunningWindows.Clear()
+            For Each title In EnumerateTopLevelWindowTitles()
+                RunningWindows.Add(title)
+            Next
+            If String.IsNullOrWhiteSpace(Settings.WindowTitle) AndAlso RunningWindows.Count > 0 Then
+                Settings.WindowTitle = RunningWindows(0)
+                OnPropertyChanged(NameOf(Settings))
             End If
         End Sub
 
@@ -171,6 +233,16 @@ Namespace ViewModels
             End Get
         End Property
 
+        Private _refreshWindowsCommand As RelayCommand
+        Public ReadOnly Property RefreshWindowsCommand As RelayCommand
+            Get
+                If _refreshWindowsCommand Is Nothing Then
+                    _refreshWindowsCommand = New RelayCommand(Sub() LoadWindows())
+                End If
+                Return _refreshWindowsCommand
+            End Get
+        End Property
+
         Private _startCommand As RelayCommand
         Public ReadOnly Property StartCommand As RelayCommand
             Get
@@ -180,6 +252,7 @@ Namespace ViewModels
                             Try
                                 Dim path = _rec.StartRecording(Settings)
                                 IsRecording = True
+                                IsPaused = False
                                 AppendLog("Recording file: " & path)
                             Catch ex As Exception
                                 AppendLog("Start failed: " & ex.Message)
@@ -192,12 +265,55 @@ Namespace ViewModels
             End Get
         End Property
 
+        Private _pauseCommand As RelayCommand
+        Public ReadOnly Property PauseCommand As RelayCommand
+            Get
+                If _pauseCommand Is Nothing Then
+                    _pauseCommand = New RelayCommand(
+                        Sub()
+                            Try
+                                _rec.PauseRecording()
+                                IsPaused = True
+                                Status = "Paused."
+                            Catch ex As Exception
+                                AppendLog("Pause failed: " & ex.Message)
+                            End Try
+                        End Sub,
+                        Function() IsRecording AndAlso Not IsPaused)
+                End If
+                Return _pauseCommand
+            End Get
+        End Property
+
+        Private _resumeCommand As RelayCommand
+        Public ReadOnly Property ResumeCommand As RelayCommand
+            Get
+                If _resumeCommand Is Nothing Then
+                    _resumeCommand = New RelayCommand(
+                        Sub()
+                            Try
+                                _rec.ResumeRecording()
+                                IsPaused = False
+                                Status = "Recording…"
+                            Catch ex As Exception
+                                AppendLog("Resume failed: " & ex.Message)
+                            End Try
+                        End Sub,
+                        Function() IsPaused)
+                End If
+                Return _resumeCommand
+            End Get
+        End Property
+
         Private _stopCommand As RelayCommand
         Public ReadOnly Property StopCommand As RelayCommand
             Get
                 If _stopCommand Is Nothing Then
                     _stopCommand = New RelayCommand(
-                        Sub() _rec.StopRecording(),
+                        Sub()
+                            _rec.StopRecording()
+                            IsPaused = False
+                        End Sub,
                         Function() IsRecording)
                 End If
                 Return _stopCommand
@@ -211,5 +327,41 @@ Namespace ViewModels
         Public Sub Dispose() Implements IDisposable.Dispose
             _rec?.Dispose()
         End Sub
+
+        ' --- Window enumeration (User32) ---
+        Private Delegate Function EnumWindowsProc(hWnd As IntPtr, lParam As IntPtr) As Boolean
+
+        <DllImport("user32.dll")>
+        Private Shared Function EnumWindows(lpEnumFunc As EnumWindowsProc, lParam As IntPtr) As Boolean
+        End Function
+
+        <DllImport("user32.dll")>
+        Private Shared Function IsWindowVisible(hWnd As IntPtr) As Boolean
+        End Function
+
+        <DllImport("user32.dll", CharSet:=CharSet.Unicode)>
+        Private Shared Function GetWindowText(hWnd As IntPtr, lpString As System.Text.StringBuilder, nMaxCount As Integer) As Integer
+        End Function
+
+        <DllImport("user32.dll")>
+        Private Shared Function GetWindowTextLength(hWnd As IntPtr) As Integer
+        End Function
+
+        Private Shared Function EnumerateTopLevelWindowTitles() As IEnumerable(Of String)
+            Dim results As New List(Of String)
+            EnumWindows(Function(hwnd, lParam)
+                            If Not IsWindowVisible(hwnd) Then Return True
+                            Dim len = GetWindowTextLength(hwnd)
+                            If len <= 0 Then Return True
+                            Dim sb As New System.Text.StringBuilder(len + 1)
+                            GetWindowText(hwnd, sb, sb.Capacity)
+                            Dim title = sb.ToString().Trim()
+                            If Not String.IsNullOrWhiteSpace(title) Then
+                                results.Add(title)
+                            End If
+                            Return True
+                        End Function, IntPtr.Zero)
+            Return results.Distinct().OrderBy(Function(t) t)
+        End Function
     End Class
 End Namespace

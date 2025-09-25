@@ -31,16 +31,19 @@ Namespace Models
         Public Property RegionHeight As Integer = 720
         Public Property WindowTitle As String = ""
 
+        ' Audio
         Public Property RecordSystemAudio As Boolean = True
+        Public Property RecordMicrophone As Boolean = False
         Public Property MicrophoneDevice As String = ""
+
+        ' Kept for backward compatibility but no longer used for routing
         Public Property MixMicAndSystem As Boolean = True
 
-        ' Friendly display name for encoder, default to x264.
+        ' Video encoder
         Public Property VideoEncoder As String = "Software (libx264)"
-        ' New: Low | Medium | High (default Medium)
         Public Property QualityLevel As String = "Medium"
 
-        ' Legacy (unused now): kept only for backward compatibility with old bindings/saves
+        ' Legacy (unused now)
         Public Property QualityPreset As String = ""
 
         Public Function ResolveOutputPath() As String
